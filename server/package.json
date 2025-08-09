@@ -17,7 +17,10 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "sample:issues": "ts-node scripts/create_sample_issues.ts",
+    "simulate:webhook": "ts-node scripts/simulate_webhook.ts",
+    "sample:issues:app": "ts-node scripts/create_issues_via_app.ts"
   },
   "dependencies": {
     "body-parser": "1.20.3",
@@ -26,7 +29,7 @@
     "@nestjs/config": "4.0.2",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
-    "@octokit/app": "16.0.1",
+    "@octokit/auth-app": "7.1.4",
     "@octokit/rest": "22.0.0",
     "@octokit/webhooks": "14.1.3",
     "@prisma/client": "6.13.0",

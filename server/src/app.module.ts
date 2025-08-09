@@ -5,12 +5,14 @@ import { AppService } from './app.service';
 import { WebhookModule } from './webhook/webhook.module';
 import { IssuesModule } from './issues/issues.module';
 import { validateEnv } from './config/env.validation';
+import { GithubModule } from './github/github.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv as any }),
     WebhookModule,
     IssuesModule,
+    GithubModule,
   ],
   controllers: [AppController],
   providers: [AppService],

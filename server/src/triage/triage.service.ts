@@ -11,12 +11,25 @@ export class TriageService {
   ) {}
 
   async upsertIssueFromGithub(repoOwner: string, repoName: string, ghIssue: { number: number; title: string; body?: string | null; state?: string; author?: string | null; }): Promise<string> {
-    const repo = await this.prisma.repoInstallation.upsert({
-      where: { owner_repo: { owner: repoOwner, repo: repoName } },
-      update: {},
-      create: { owner: repoOwner, repo: repoName, installationId: BigInt(0) },
-      select: { id: true },
-    });
+    // Handle potential concurrent upserts by falling back to findUnique on P2002
+    let repo;
+    try {
+      repo = await this.prisma.repoInstallation.upsert({
+        where: { owner_repo: { owner: repoOwner, repo: repoName } },
+        update: {},
+        create: { owner: repoOwner, repo: repoName, installationId: BigInt(0) },
+        select: { id: true },
+      });
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        repo = await this.prisma.repoInstallation.findUniqueOrThrow({
+          where: { owner_repo: { owner: repoOwner, repo: repoName } },
+          select: { id: true },
+        });
+      } else {
+        throw e;
+      }
+    }
     const issue = await this.prisma.issue.upsert({
       where: { repoId_number: { repoId: repo.id, number: ghIssue.number } },
       update: { title: ghIssue.title, body: ghIssue.body ?? undefined, state: ghIssue.state ?? 'open', author: ghIssue.author ?? undefined },

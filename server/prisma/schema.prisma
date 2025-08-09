@@ -85,6 +85,8 @@ model SimilarLink {
   similarIssue    Issue  @relation("toIssue", fields: [similarIssueId], references: [id], onDelete: Cascade)
   similarIssueId  String
   score           Float
+
+  @@unique([issueId, similarIssueId])
 }
 
 model RoutingMap {

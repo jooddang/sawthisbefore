@@ -7,6 +7,13 @@ const schema = z.object({
   GOOGLE_API_KEY: z.string().optional(),
   EMBEDDINGS_MODEL: z.string().default('text-embedding-004'),
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
+  GITHUB_APP_ID: z.string().optional(),
+  GITHUB_PRIVATE_KEY: z.string().optional(),
+  GITHUB_PRIVATE_KEY_BASE64: z.string().optional(),
+  NO_DB: z
+    .union([z.string().transform((v) => v === 'true'), z.boolean()])
+    .optional()
+    .transform((v) => Boolean(v)),
 });
 
 export type AppEnv = z.infer<typeof schema>;
