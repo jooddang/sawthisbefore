@@ -1,23 +1,35 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
+import { GithubService } from '../github/github.service';
 import { EmbeddingService } from '../embedding/embedding.service';
 
 @Injectable()
 export class TriageService {
+  private readonly logger = new Logger(TriageService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly embedding: EmbeddingService,
+    private readonly github: GithubService,
   ) {}
 
-  async upsertIssueFromGithub(repoOwner: string, repoName: string, ghIssue: { number: number; title: string; body?: string | null; state?: string; author?: string | null; }): Promise<string> {
+  async upsertIssueFromGithub(
+    repoOwner: string,
+    repoName: string,
+    ghIssue: { number: number; title: string; body?: string | null; state?: string; author?: string | null },
+    installationId?: number,
+  ): Promise<string> {
     // Handle potential concurrent upserts by falling back to findUnique on P2002
     let repo;
     try {
       repo = await this.prisma.repoInstallation.upsert({
         where: { owner_repo: { owner: repoOwner, repo: repoName } },
-        update: {},
-        create: { owner: repoOwner, repo: repoName, installationId: BigInt(0) },
+        update: installationId != null ? { installationId: BigInt(installationId) } : {},
+        create: {
+          owner: repoOwner,
+          repo: repoName,
+          installationId: BigInt(installationId ?? 0),
+        },
         select: { id: true },
       });
     } catch (e: any) {
@@ -30,6 +42,7 @@ export class TriageService {
         throw e;
       }
     }
+    this.logger.log(`Upserting issue ${repoOwner}/${repoName}#${ghIssue.number}`);
     const issue = await this.prisma.issue.upsert({
       where: { repoId_number: { repoId: repo.id, number: ghIssue.number } },
       update: { title: ghIssue.title, body: ghIssue.body ?? undefined, state: ghIssue.state ?? 'open', author: ghIssue.author ?? undefined },
@@ -57,6 +70,7 @@ export class TriageService {
         update: { score: s.score },
         create: { issueId: issue.id, similarIssueId: s.id, score: s.score },
       } as unknown as Prisma.SimilarLinkUpsertArgs);
+      this.logger.log(`Upserted SimilarLink for ${issue.id} -> ${s.id} score=${s.score.toFixed(3)}`);
     }
 
     // Store a minimal triage suggestion (labels/assignees empty initially)
@@ -70,6 +84,42 @@ export class TriageService {
         rationale: 'Initial retrieval only',
       },
     });
+    this.logger.log(`Created TriageSuggestion for issue ${issue.id}`);
+
+    if (process.env.POST_COMMENTS === 'true') {
+      try {
+        // Prefer provided installationId; otherwise fetch from repo
+        const repoInfo = await this.prisma.issue.findUnique({
+          where: { id: issue.id },
+          select: { number: true, repo: { select: { owner: true, repo: true, installationId: true } } },
+        });
+        const effectiveInstallationId = installationId ?? Number(repoInfo?.repo.installationId ?? 0);
+        const client = await this.github.getInstallationClient(effectiveInstallationId);
+        if (!client) {
+          this.logger.warn('GitHub App not configured; skipping comment posting');
+        } else {
+          const similarNumbers: string[] = [];
+          for (const s of top) {
+            const similarIssue = await this.prisma.issue.findUnique({
+              where: { id: s.id },
+              select: { number: true },
+            });
+            if (similarIssue) {
+              similarNumbers.push(`#${similarIssue.number} (score: ${s.score.toFixed(3)})`);
+            }
+          }
+          if (repoInfo && similarNumbers.length > 0) {
+            const owner = repoInfo.repo.owner;
+            const name = repoInfo.repo.repo;
+            const body = `Similar issues detected:\n- ${similarNumbers.join('\n- ')}`;
+            await client.issues.createComment({ owner, repo: name, issue_number: repoInfo.number, body });
+            this.logger.log(`Posted comment on ${owner}/${name}#${repoInfo.number}: ${body}`);
+          }
+        }
+      } catch (e) {
+        this.logger.error('Failed to post GitHub comments in DB mode', e as any);
+      }
+    }
 
     return issue.id;
   }

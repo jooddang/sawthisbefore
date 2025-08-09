@@ -23,19 +23,25 @@ export class WebhookService {
       const issue = p?.issue as any;
       const repository = p?.repository as any;
       if (!issue || !repository) return;
+      this.logger.log(
+        `issues action=${action} repo=${repository?.full_name ?? `${repository?.owner?.login}/${repository?.name}`} issue=#${issue?.number}`,
+      );
       const owner = repository.owner?.login ?? repository.owner?.name ?? 'unknown';
       const repo = repository.name ?? 'unknown';
       if (action === 'opened' || action === 'edited' || action === 'reopened') {
         if (process.env.NO_DB === 'true' || (global as any).NO_DB === true) {
-          await this.handleNoDbSimilarityFlow(p.installation?.id, owner, repo, issue);
+          this.logger.log('NO_DB mode: running similarity/comment flow');
+          const installationId = (p.installation?.id ?? Number(process.env.GITHUB_INSTALLATION_ID ?? 0)) || undefined;
+          await this.handleNoDbSimilarityFlow(installationId, owner, repo, issue);
         } else {
+          this.logger.log('DB mode: upserting issue and computing similarities');
           await this.triage.upsertIssueFromGithub(owner, repo, {
             number: issue.number,
             title: issue.title,
             body: issue.body,
             state: issue.state,
             author: issue.user?.login ?? undefined,
-          });
+          }, p.installation?.id ?? Number(process.env.GITHUB_INSTALLATION_ID ?? 0));
         }
       }
     }
@@ -51,6 +57,7 @@ export class WebhookService {
     // Fetch recent issues (excluding PRs)
     const listRes = await client.issues.listForRepo({ owner, repo, state: 'open', per_page: 50, sort: 'created', direction: 'desc' });
     const issues = listRes.data.filter((i) => !i.pull_request);
+    this.logger.log(`Fetched ${issues.length} open issues for similarity check`);
     const targetText = `${targetIssue.title}\n\n${targetIssue.body ?? ''}`.slice(0, 8000);
     const targetVec = await this.embedding.embedText(targetText);
     type Scored = { number: number; id: number; title: string; body?: string | null; score: number };
@@ -64,12 +71,14 @@ export class WebhookService {
     }
     scored.sort((a, b) => b.score - a.score);
     const top = scored.slice(0, 3).filter((s) => s.score > 0);
-    for (const s of top) {
-      const body = `Found similar issue: #${s.number} (score: ${s.score.toFixed(3)})`;
+    this.logger.log(
+      `Top similar: ${top.map((s) => `#${s.number}:${s.score.toFixed(3)}`).join(', ') || '(none > 0)'}`,
+    );
+    if (top.length > 0) {
+      const list = top.map((s) => `- #${s.number} (score: ${s.score.toFixed(3)})`).join('\n');
+      const body = `Similar issues detected:\n${list}`;
       await client.issues.createComment({ owner, repo, issue_number: targetIssue.number, body });
-      // Optionally cross-comment on the similar issue about the target
-      const backBody = `Related to #${targetIssue.number} (score: ${s.score.toFixed(3)})`;
-      await client.issues.createComment({ owner, repo, issue_number: s.number, body: backBody });
+      this.logger.log(`Commented on #${targetIssue.number}: ${body}`);
     }
   }
 }

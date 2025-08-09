@@ -14,6 +14,10 @@ const schema = z.object({
     .union([z.string().transform((v) => v === 'true'), z.boolean()])
     .optional()
     .transform((v) => Boolean(v)),
+  POST_COMMENTS: z
+    .union([z.string().transform((v) => v === 'true'), z.boolean()])
+    .optional()
+    .transform((v) => Boolean(v)),
 });
 
 export type AppEnv = z.infer<typeof schema>;
