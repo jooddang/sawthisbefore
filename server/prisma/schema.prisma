@@ -1,0 +1,108 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model RepoInstallation {
+  id              String   @id @default(cuid())
+  owner           String
+  repo            String
+  installationId  BigInt
+  settingsJson    Json?
+  issues          Issue[]
+  metricsDaily    MetricsDaily[]
+
+  @@unique([owner, repo])
+}
+
+model Issue {
+  id         String          @id @default(cuid())
+  repo       RepoInstallation @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  repoId     String
+  number     Int
+  title      String
+  body       String?
+  state      String
+  author     String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  embeddings IssueEmbedding[]
+  suggestions TriageSuggestion[]
+  decisions  DecisionLog[]
+  similarFrom SimilarLink[]  @relation("fromIssue")
+  similarTo   SimilarLink[]  @relation("toIssue")
+
+  @@unique([repoId, number])
+}
+
+model IssueEmbedding {
+  id        String   @id @default(cuid())
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  issueId   String
+  // Using float8[] for portability; pgvector can be introduced later
+  vector    Float[]
+  model     String
+  createdAt DateTime @default(now())
+}
+
+model TriageSuggestion {
+  id             String   @id @default(cuid())
+  issue          Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  issueId        String
+  labels         String[]
+  assignees      String[]
+  priorityScore  Int
+  duplicateOf    Int?
+  confidenceJson Json
+  rationale      String
+  createdAt      DateTime @default(now())
+}
+
+model DecisionLog {
+  id         String   @id @default(cuid())
+  issue      Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  issueId    String
+  action     String
+  actor      String
+  payload    Json?
+  createdAt  DateTime @default(now())
+}
+
+model SimilarLink {
+  id              String @id @default(cuid())
+  issue           Issue  @relation("fromIssue", fields: [issueId], references: [id], onDelete: Cascade)
+  issueId         String
+  similarIssue    Issue  @relation("toIssue", fields: [similarIssueId], references: [id], onDelete: Cascade)
+  similarIssueId  String
+  score           Float
+}
+
+model RoutingMap {
+  id          String   @id @default(cuid())
+  component   String
+  teamSlug    String
+  codeownersPaths String[]
+}
+
+model MetricsDaily {
+  id            String   @id @default(cuid())
+  date          DateTime
+  repo          RepoInstallation @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  repoId        String
+  suggestions   Int      @default(0)
+  accepted      Int      @default(0)
+  autoApplied   Int      @default(0)
+  dupesClosed   Int      @default(0)
+
+  @@unique([date, repoId])
+}

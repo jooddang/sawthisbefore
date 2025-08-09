@@ -1,0 +1,81 @@
+# --- Node / TypeScript (mono-repo) ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+*.tsbuildinfo
+
+# Build / cache / coverage
+dist/
+build/
+.out/
+.tmp/
+.temp/
+.cache/
+coverage/
+.nyc_output/
+
+# Subpackages (server, worker)
+server/node_modules/
+server/dist/
+server/*.log
+server/*.tsbuildinfo
+
+worker/node_modules/
+worker/dist/
+worker/*.log
+worker/*.tsbuildinfo
+
+# --- Env & secrets (keep the examples) ---
+.env
+.env.*
+!*.env.example
+
+server/.env
+server/.env.*
+!server/.env.example
+
+worker/.env
+worker/.env.*
+!worker/.env.example
+
+# Common secret formats
+*.pem
+*.key
+*.crt
+
+# --- Infra / Docker (local state) ---
+# Docker named volumes are fine; ignore any local bind-mount dirs if you add them
+infra/pg_data/
+infra/temporal_pg/
+temporal-data/
+dump.rdb
+
+# Local docker overrides
+docker-compose.override.yml
+.env.docker
+
+# --- Logs & PIDs ---
+logs/
+*.log
+pids/
+*.pid
+
+# --- OS cruft ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+.Spotlight-V100
+.Trashes
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.iml
+
+# --- Misc ---
+*.swp
+*~
